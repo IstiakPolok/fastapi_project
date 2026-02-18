@@ -3,8 +3,11 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = "sqlite:///./app.db"
+    # Database (PostgreSQL)
+    DATABASE_URL: str = "postgresql://mobashir@/senior_companion_db"
+    
+    # ChromaDB (RAG Memory)
+    CHROMADB_PATH: str = "./chroma_data"
     
     # JWT
     SECRET_KEY: str
