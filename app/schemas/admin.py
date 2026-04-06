@@ -16,6 +16,12 @@ class AdminLogin(BaseModel):
     password: str
 
 
+class AdminChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+
+
 class AdminResponse(BaseModel):
     id: int
     name: str
@@ -27,6 +33,15 @@ class AdminResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AdminProfileResponse(AdminResponse):
+    pass
+
+
+class AdminProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
 
 
 class AdminToken(BaseModel):
@@ -46,12 +61,13 @@ class DashboardStats(BaseModel):
 
 
 class RevenueDataPoint(BaseModel):
-    month: str  # e.g., "Jan", "Feb"
+    date: str  # e.g., "2024-03-01"
     revenue: float
 
 
 class RevenueChartData(BaseModel):
-    data: List[RevenueDataPoint]
+    last_month_data: List[RevenueDataPoint]
+    this_month_data: List[RevenueDataPoint]
     total_revenue: float
     growth_percentage: float
 

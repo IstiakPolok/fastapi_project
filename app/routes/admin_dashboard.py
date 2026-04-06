@@ -54,46 +54,67 @@ async def get_dashboard_stats(
 
 @router.get("/revenue-chart", response_model=RevenueChartData)
 async def get_revenue_chart(
-    months: int = Query(default=12, ge=1, le=24),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin)
 ):
-    """Get revenue data for chart visualization"""
-    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    """Get daily revenue data for the previous month and current month to date"""
+    current_date = datetime.utcnow()
+    # Start of last month
+    if current_date.month == 1:
+        start_date = current_date.replace(year=current_date.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        start_date = current_date.replace(month=current_date.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get all subscription records from start_date
+    subscriptions = db.query(
+        func.date(UserSubscription.created_at).label("day"),
+        func.sum(UserSubscription.payment_amount).label("revenue")
+    ).filter(
+        UserSubscription.created_at >= start_date,
+        UserSubscription.payment_status == "completed"
+    ).group_by(
+        func.date(UserSubscription.created_at)
+    ).all()
+    
+    # Map results to a dictionary for easy access
+    revenue_map = {str(s.day): s.revenue for s in subscriptions}
     
     data = []
     total_revenue = 0
-    current_date = datetime.utcnow()
     
-    for i in range(months - 1, -1, -1):
-        # Calculate month start and end
-        target_date = current_date - timedelta(days=30 * i)
-        month_start = target_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if target_date.month == 12:
-            month_end = month_start.replace(year=month_start.year + 1, month=1)
-        else:
-            month_end = month_start.replace(month=month_start.month + 1)
-        
-        # Get revenue for this month
-        revenue = db.query(func.sum(UserSubscription.payment_amount)).filter(
-            UserSubscription.created_at >= month_start,
-            UserSubscription.created_at < month_end
-        ).scalar() or 0
+    # Iterate through each day from start_date to today
+    delta = current_date - start_date
+    for i in range(delta.days + 1):
+        day = start_date + timedelta(days=i)
+        day_str = day.strftime("%Y-%m-%d")
+        revenue = revenue_map.get(day_str, 0) or 0
         
         data.append(RevenueDataPoint(
-            month=month_names[month_start.month - 1],
+            date=day_str,
             revenue=round(revenue, 2)
         ))
         total_revenue += revenue
+        
+    # Calculate current month start for filtering
+    current_month_start = current_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     
-    # Calculate growth percentage (compare last two months)
+    # Filter into last month and this month
+    last_month_data = [p for p in data if datetime.strptime(p.date, "%Y-%m-%d") < current_month_start]
+    this_month_data = [p for p in data if datetime.strptime(p.date, "%Y-%m-%d") >= current_month_start]
+    
+    # Calculate growth percentage
+    last_month_revenue = sum(p.revenue for p in last_month_data)
+    current_month_revenue = sum(p.revenue for p in this_month_data)
+    
     growth_percentage = 0
-    if len(data) >= 2 and data[-2].revenue > 0:
-        growth_percentage = ((data[-1].revenue - data[-2].revenue) / data[-2].revenue) * 100
+    if last_month_revenue > 0:
+        growth_percentage = ((current_month_revenue / last_month_revenue) - 1) * 100
+    elif current_month_revenue > 0:
+        growth_percentage = 100
     
     return RevenueChartData(
-        data=data,
+        last_month_data=last_month_data,
+        this_month_data=this_month_data,
         total_revenue=round(total_revenue, 2),
         growth_percentage=round(growth_percentage, 2)
     )

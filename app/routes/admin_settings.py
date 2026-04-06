@@ -8,6 +8,7 @@ from app.schemas.settings import (
     TermsOfServiceUpdate, TermsOfServiceResponse
 )
 from app.core.admin_dependencies import get_current_admin
+from app.services.activity_service import ActivityService
 
 router = APIRouter(prefix="/api/admin/settings", tags=["Admin - Settings"])
 
@@ -56,6 +57,14 @@ async def update_privacy_policy(
     db.commit()
     db.refresh(policy)
     
+    # Log activity
+    ActivityService.log_activity(
+        db=db,
+        admin_id=admin.id,
+        action="update_privacy_policy",
+        description="Admin updated privacy policy"
+    )
+    
     return policy
 
 
@@ -99,5 +108,13 @@ async def update_terms_of_service(
     
     db.commit()
     db.refresh(terms)
+    
+    # Log activity
+    ActivityService.log_activity(
+        db=db,
+        admin_id=admin.id,
+        action="update_terms_of_service",
+        description="Admin updated terms of service"
+    )
     
     return terms

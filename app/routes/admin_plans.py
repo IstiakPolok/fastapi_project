@@ -6,6 +6,7 @@ from app.models.admin import Admin
 from app.models.subscription import SubscriptionPlan
 from app.schemas.subscription import PlanCreate, PlanUpdate, PlanResponse, PlanListResponse
 from app.core.admin_dependencies import get_current_admin
+from app.services.activity_service import ActivityService
 
 router = APIRouter(prefix="/api/admin/plans", tags=["Admin - Subscription Plans"])
 
@@ -77,6 +78,14 @@ async def create_plan(
     db.commit()
     db.refresh(new_plan)
     
+    # Log activity
+    ActivityService.log_activity(
+        db=db,
+        admin_id=admin.id,
+        action="create_plan",
+        description=f"Admin created plan: {new_plan.name}"
+    )
+    
     return new_plan
 
 
@@ -103,6 +112,14 @@ async def update_plan(
     db.commit()
     db.refresh(plan)
     
+    # Log activity
+    ActivityService.log_activity(
+        db=db,
+        admin_id=admin.id,
+        action="update_plan",
+        description=f"Admin updated plan: {plan.name}"
+    )
+    
     return plan
 
 
@@ -123,5 +140,13 @@ async def delete_plan(
     # Soft delete - just mark as inactive
     plan.is_active = False
     db.commit()
+    
+    # Log activity
+    ActivityService.log_activity(
+        db=db,
+        admin_id=admin.id,
+        action="delete_plan",
+        description=f"Admin deleted plan: {plan.name}"
+    )
     
     return {"message": "Plan deleted successfully"}

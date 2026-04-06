@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from app.database import get_db
@@ -8,13 +8,14 @@ from app.models.user import User
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.dependencies import get_current_user
 from app.services.email_service import create_otp, send_otp_email, verify_otp
+from app.services.activity_service import ActivityService
 from app.config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
 @router.post("/signup", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
+async def signup(user_data: UserCreate, request: Request, db: Session = Depends(get_db)):
     """Register a new user"""
     # Validate password confirmation
     if user_data.password != user_data.confirm_password:
@@ -44,6 +45,15 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     
+    # Log activity
+    ActivityService.log_activity(
+        db=db,
+        user_id=new_user.id,
+        action="signup",
+        description=f"User {new_user.email} signed up",
+        request=request
+    )
+    
     # Create access token
     access_token = create_access_token(
         data={"sub": new_user.email},
@@ -54,7 +64,7 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
+async def login(user_data: UserLogin, request: Request, db: Session = Depends(get_db)):
     """Login user and return JWT token"""
     # Find user
     user = db.query(User).filter(User.email == user_data.email).first()
@@ -82,6 +92,15 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(
         data={"sub": user.email},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    
+    # Log activity
+    ActivityService.log_activity(
+        db=db,
+        user_id=user.id,
+        action="login",
+        description=f"User {user.email} logged in",
+        request=request
     )
     
     return {"access_token": access_token, "token_type": "bearer"}

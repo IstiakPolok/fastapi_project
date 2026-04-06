@@ -5,7 +5,7 @@ There is only ONE continuous conversation per user.  No sessions, no
 "new chat" — just a unified timeline.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.chat import Chat
 from app.core.dependencies import get_current_user
 from app.services.ai_service import get_ai_response, save_chat, check_moderation
+from app.services.activity_service import ActivityService
 from app.services.memory_service import soft_delete_memories
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/api/chat", tags=["Chat"])
 @router.post("", response_model=ChatResponse)
 async def send_message(
     chat_request: ChatRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -56,6 +58,15 @@ async def send_message(
 
         # 3. Moderation check (non-blocking — always returns the response)
         check_moderation(db, current_user.id, chat_request.message, ai_response)
+
+        # 4. Log activity
+        ActivityService.log_activity(
+            db=db,
+            user_id=current_user.id,
+            action="chat_message",
+            description=f"User sent message: {chat_request.message[:50]}...",
+            request=request
+        )
 
         return ChatResponse(
             id=chat.id,

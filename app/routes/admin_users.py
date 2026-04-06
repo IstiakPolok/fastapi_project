@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
+import math
 from app.database import get_db
 from app.models.user import User
 from app.models.admin import Admin
@@ -39,6 +40,9 @@ async def list_users(
     # Get total count
     total_count = query.count()
     
+    # Calculate total pages
+    total_pages = math.ceil(total_count / page_size) if total_count > 0 else 0
+    
     # Apply pagination
     offset = (page - 1) * page_size
     users = query.order_by(User.created_at.desc()).offset(offset).limit(page_size).all()
@@ -68,7 +72,9 @@ async def list_users(
         users=user_items,
         total_count=total_count,
         page=page,
-        page_size=page_size
+        page_size=page_size,
+        total_pages=total_pages,
+        current_page=page
     )
 
 

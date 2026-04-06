@@ -4,10 +4,64 @@ from typing import Optional
 from app.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.subscription import PaymentCheckoutRequest, PaymentCheckoutResponse
+from app.models.subscription import SubscriptionPlan, UserSubscription
+from app.schemas.subscription import (
+    PaymentCheckoutRequest, 
+    PaymentCheckoutResponse,
+    UserPlanResponse,
+    UserPlanListResponse
+)
 from app.services.stripe_service import StripeService
+from app.services.activity_service import ActivityService
 
 router = APIRouter(prefix="/api/payment", tags=["Payment"])
+
+
+@router.get("/plans", response_model=UserPlanListResponse)
+async def list_user_plans(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all active subscription plans with the current user's purchase status
+    """
+    # 1. Fetch all active subscription plans
+    plans = db.query(SubscriptionPlan).filter(SubscriptionPlan.is_active == True).order_by(SubscriptionPlan.price.asc()).all()
+    
+    # 2. Fetch all active subscriptions for the current user
+    user_subscriptions = db.query(UserSubscription).filter(
+        UserSubscription.user_id == current_user.id,
+        UserSubscription.status == "active",
+        UserSubscription.payment_status == "completed"
+    ).all()
+    
+    # 3. Create a map of plan_id to active subscription for quick lookup
+    sub_map = {sub.plan_id: sub for sub in user_subscriptions}
+    
+    # 4. Map plans to UserPlanResponse
+    result_plans = []
+    for plan in plans:
+        active_sub = sub_map.get(plan.id)
+        
+        user_plan = UserPlanResponse(
+            id=plan.id,
+            name=plan.name,
+            description=plan.description,
+            price=plan.price,
+            duration_days=plan.duration_days,
+            features=plan.features,
+            is_active=plan.is_active,
+            created_at=plan.created_at,
+            is_purchased=active_sub is not None,
+            subscription_id=active_sub.id if active_sub else None,
+            expiry_date=active_sub.end_date if active_sub else None
+        )
+        result_plans.append(user_plan)
+        
+    return UserPlanListResponse(
+        plans=result_plans,
+        total_count=len(result_plans)
+    )
 
 
 @router.post("/create-checkout", response_model=PaymentCheckoutResponse)
@@ -101,6 +155,16 @@ async def payment_success(
             status_code=404,
             detail="Payment session not found or not completed"
         )
+    
+    # Log activity
+    ActivityService.log_activity(
+        db=db,
+        user_id=subscription.user_id,
+        action="subscription_success",
+        description=f"User subscribed to plan {subscription.plan_id}",
+        # Request is not easily available here without changing signature, but verify_session is usually called from client redirect
+        # We'll skip request for now or add it to signature if needed.
+    )
     
     return {
         "status": "success",

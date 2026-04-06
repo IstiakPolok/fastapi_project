@@ -40,6 +40,17 @@ class PlanListResponse(BaseModel):
     total_count: int
 
 
+class UserPlanResponse(PlanResponse):
+    is_purchased: bool
+    subscription_id: Optional[int] = None
+    expiry_date: Optional[datetime] = None
+
+
+class UserPlanListResponse(BaseModel):
+    plans: List[UserPlanResponse]
+    total_count: int
+
+
 # User Subscription Schemas
 class UserSubscriptionResponse(BaseModel):
     id: int

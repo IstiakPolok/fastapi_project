@@ -1,5 +1,6 @@
 import random
 import aiosmtplib
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
@@ -7,6 +8,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.otp import OTP
 from app.models.user import User
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 def generate_otp() -> str:
@@ -41,6 +45,7 @@ async def send_otp_email(email: str, otp_code: str):
     
     # Send email
     try:
+        logger.info(f"Attempting to send OTP email to {email} via {settings.SMTP_HOST}:{settings.SMTP_PORT}")
         await aiosmtplib.send(
             message,
             hostname=settings.SMTP_HOST,
@@ -49,7 +54,9 @@ async def send_otp_email(email: str, otp_code: str):
             password=settings.SMTP_PASSWORD,
             start_tls=True
         )
+        logger.info(f"Email sent successfully to {email}")
     except Exception as e:
+        logger.error(f"SMTP Error: {e}")
         raise Exception(f"Failed to send email: {str(e)}")
 
 
